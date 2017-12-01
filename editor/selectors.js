@@ -1138,6 +1138,8 @@ export function isPublishingPost( state ) {
 }
 
 export {
-	isBlockFrozenByPeer,
+	getFrozenBlockCollaboratorColor,
+	getFrozenBlockCollaboratorName,
+	isBlockFrozenByCollaborator,
 	isCoeditingEnabled,
 } from './state/coediting';

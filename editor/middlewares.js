@@ -7,17 +7,11 @@ import {
 } from 'lodash';
 
 /**
- * WordPress dependencies
- */
-import { __ } from '@wordpress/i18n';
-
-/**
  * Internal dependencies
  */
 import Coediting from '../coediting';
 import {
-	clearFrozenBlock,
-	createInfoNotice,
+	clearFrozenBlocks,
 	freezeBlock,
 	toggleCoediting,
 } from './actions';
@@ -28,9 +22,9 @@ export function coeditingMiddleware( { dispatch, getState } ) {
 
 	const isPeerConnected = () => app && app.isConnected;
 
-	const getActionPeerId = ( action ) => get( action, 'meta.peerId', null );
+	const getActionCollaboratorId = ( action ) => get( action, 'meta.collaboratorId', null );
 
-	const isPeerAction = ( action ) => getActionPeerId( action ) !== null;
+	const isCoeditingAction = ( action ) => getActionCollaboratorId( action ) !== null;
 
 	// Starts the coediting and enables its API.
 	function startCoedting() {
@@ -44,12 +38,15 @@ export function coeditingMiddleware( { dispatch, getState } ) {
 
 		app = new Coediting( coeditingId );
 		app.on( 'peerData', onPeerData );
-		app.on( 'peerConnected', function() {
-			dispatch( createInfoNotice( __( 'Collaborator joined!' ) ) );
+		app.on( 'peerFound', function( { peerId, userId } ) {
+			// TODO: Convert to action
+			dispatch( {
+				type: 'COEDITING_COLLABORATOR_ADD',
+				collaboratorId: peerId,
+				userId,
+			} );
 		} );
-		app.on( 'peerClosed', function() {
-			dispatch( createInfoNotice( __( 'Collaborator left!' ) ) );
-		} );
+		// TODO: Remove collaborators when disconnected
 	}
 
 	const stopCoediting = () => {
@@ -65,12 +62,12 @@ export function coeditingMiddleware( { dispatch, getState } ) {
 	};
 
 	const peerSend = ( action ) => {
-		if ( ! isPeerConnected() || isPeerAction( action ) ) {
+		if ( ! isPeerConnected() || isCoeditingAction( action ) ) {
 			return;
 		}
 
 		const allowedActions = [
-			'COEDITING_CLEAR_FROZEN_BLOCK',
+			'COEDITING_BLOCKS_UNFREEZE',
 			'COEDITING_FREEZE_BLOCK',
 			'EDIT_POST',
 			'INSERT_BLOCKS',
@@ -88,13 +85,13 @@ export function coeditingMiddleware( { dispatch, getState } ) {
 		app.send( {
 			...action,
 			meta: {
-				peerId: app.peerId,
+				collaboratorId: app.peerId,
 			},
 		} );
 	};
 
 	function onPeerData( action ) {
-		if ( getActionPeerId( action ) !== app.peerId ) {
+		if ( getActionCollaboratorId( action ) !== app.peerId ) {
 			dispatch( action );
 		}
 	}
@@ -122,7 +119,7 @@ export function coeditingMiddleware( { dispatch, getState } ) {
 				peerSend( freezeBlock( action.uid ) );
 				break;
 			case 'CLEAR_SELECTED_BLOCK':
-				peerSend( clearFrozenBlock() );
+				peerSend( clearFrozenBlocks() );
 				break;
 			default:
 				peerSend( action );

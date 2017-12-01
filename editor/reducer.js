@@ -385,6 +385,7 @@ export function blockSelection( state = { start: null, end: null, focus: null, i
 				end: action.uid,
 				focus: action.config || {},
 			};
+		// TODO: Trigger UPDATE_FOCUS instead to avoid focus change on collaborator side
 		case 'INSERT_BLOCKS':
 			return {
 				start: action.blocks[ 0 ].uid,
@@ -392,6 +393,7 @@ export function blockSelection( state = { start: null, end: null, focus: null, i
 				focus: {},
 				isMultiSelecting: false,
 			};
+		// TODO: Trigger UPDATE_FOCUS instead to avoid focus change on collaborator side
 		case 'REPLACE_BLOCKS':
 			if ( ! action.blocks || ! action.blocks.length || action.uids.indexOf( state.start ) === -1 ) {
 				return state;

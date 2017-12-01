@@ -506,7 +506,7 @@ export function toggleFeature( feature ) {
 }
 
 export {
-	clearFrozenBlock,
+	clearFrozenBlocks,
 	freezeBlock,
 	toggleCoediting,
 } from './state/coediting';

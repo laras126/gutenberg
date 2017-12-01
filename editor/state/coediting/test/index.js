@@ -7,18 +7,159 @@ import deepFreeze from 'deep-freeze';
  * Internal dependencies
  */
 import {
-	clearFrozenBlock,
+	blocks,
+	clearFrozenBlocks,
+	collaborators,
 	enabled,
 	freezeBlock,
-	isBlockFrozenByPeer,
+	isBlockFrozenByCollaborator,
 	isCoeditingEnabled,
-	peers,
 	toggleCoediting,
 } from '../';
 
 describe( 'coediting state', () => {
-	const peerId = 'peer-id';
+	const collaboratorId = 'collaborator-id';
 	const uid = 'block-uid';
+
+	describe( 'blocks reducer', () => {
+		it( 'should not update the state when no meta provided', () => {
+			const initialState = deepFreeze( {} );
+			const state = blocks( initialState, {
+				type: 'COEDITING_FREEZE_BLOCK',
+				uid,
+			} );
+
+			expect( state ).toBe( initialState );
+		} );
+
+		it( 'should add a new block frozen by collaborator', () => {
+			const initialState = deepFreeze( {} );
+			const state = blocks( initialState, {
+				type: 'COEDITING_FREEZE_BLOCK',
+				uid,
+				meta: {
+					collaboratorId,
+				},
+			} );
+
+			expect( state ).toEqual( {
+				[ uid ]: collaboratorId,
+			} );
+		} );
+
+		it( 'should replace a block frozen by collaborator', () => {
+			const initialState = deepFreeze( {
+				[ uid ]: collaboratorId,
+			} );
+			const newUid = 'new-uid';
+			const state = blocks( initialState, {
+				type: 'COEDITING_FREEZE_BLOCK',
+				uid: newUid,
+				meta: {
+					collaboratorId,
+				},
+			} );
+
+			expect( state ).toEqual( {
+				[ newUid ]: collaboratorId,
+			} );
+		} );
+
+		it( 'should not update the state when a block was already frozen by the same collaborator', () => {
+			const initialState = deepFreeze( {
+				[ uid ]: collaboratorId,
+			} );
+			const state = blocks( initialState, {
+				type: 'COEDITING_FREEZE_BLOCK',
+				uid,
+				meta: {
+					collaboratorId,
+				},
+			} );
+
+			expect( state ).toBe( initialState );
+		} );
+
+		it( 'should not update the state when no frozen blocks for collaborator', () => {
+			const initialState = deepFreeze( {} );
+			const state = blocks( initialState, {
+				type: 'COEDITING_BLOCKS_UNFREEZE',
+				meta: {
+					collaboratorId,
+				},
+			} );
+
+			expect( state ).toBe( initialState );
+		} );
+
+		it( 'should remove the block frozen by collaborator', () => {
+			const initialState = deepFreeze( {
+				[ uid ]: collaboratorId,
+			} );
+			const state = blocks( initialState, {
+				type: 'COEDITING_BLOCKS_UNFREEZE',
+				meta: {
+					collaboratorId,
+				},
+			} );
+
+			expect( state ).toEqual( {} );
+		} );
+	} );
+
+	describe( 'collaborators reducer', () => {
+		const color = 'green';
+		const userId = 123;
+		it( 'should add new collaborator', () => {
+			const initialState = deepFreeze( {} );
+			const state = collaborators( initialState, {
+				type: 'COEDITING_COLLABORATOR_ADD',
+				collaboratorId,
+				userId,
+			} );
+
+			expect( state ).toEqual( {
+				[ collaboratorId ]: {
+					color: expect.any( String ),
+					name: `User: ${ userId }`,
+					userId,
+				},
+			} );
+		} );
+
+		it( 'should not update the state when trying to remove an unknown collaborator', () => {
+			const initialState = deepFreeze( {
+				[ collaboratorId ]: {
+					color,
+					name: `User: ${ userId }`,
+					userId,
+				},
+			} );
+			const unknownId = 321;
+			const state = collaborators( initialState, {
+				type: 'COEDITING_COLLABORATOR_REMOVE',
+				collaboratorId: unknownId,
+			} );
+
+			expect( state ).toBe( initialState );
+		} );
+
+		it( 'should remove the existing collaborator', () => {
+			const initialState = deepFreeze( {
+				[ collaboratorId ]: {
+					color,
+					name: `User: ${ userId }`,
+					userId,
+				},
+			} );
+			const state = collaborators( initialState, {
+				type: 'COEDITING_COLLABORATOR_REMOVE',
+				collaboratorId,
+			} );
+
+			expect( state ).toEqual( {} );
+		} );
+	} );
 
 	describe( 'enabled reducer', () => {
 		it( 'should update to true when no previous state provided', () => {
@@ -46,92 +187,6 @@ describe( 'coediting state', () => {
 		} );
 	} );
 
-	describe( 'peers reducer', () => {
-		it( 'should not update the state when no meta provided', () => {
-			const initialState = deepFreeze( {} );
-			const state = peers( initialState, {
-				type: 'COEDITING_FREEZE_BLOCK',
-				uid,
-			} );
-
-			expect( state ).toBe( initialState );
-		} );
-
-		it( 'should add a new block frozen by peer', () => {
-			const initialState = deepFreeze( {} );
-			const state = peers( initialState, {
-				type: 'COEDITING_FREEZE_BLOCK',
-				uid,
-				meta: {
-					peerId,
-				},
-			} );
-
-			expect( state ).toEqual( {
-				[ peerId ]: uid,
-			} );
-		} );
-
-		it( 'should replace a block frozen by peer', () => {
-			const initialState = deepFreeze( {
-				[ peerId ]: uid,
-			} );
-			const newUid = 'new-uid';
-			const state = peers( initialState, {
-				type: 'COEDITING_FREEZE_BLOCK',
-				uid: newUid,
-				meta: {
-					peerId,
-				},
-			} );
-
-			expect( state ).toEqual( {
-				[ peerId ]: newUid,
-			} );
-		} );
-
-		it( 'should not update the state when a block was already frozen by the same peer', () => {
-			const initialState = deepFreeze( {
-				[ peerId ]: uid,
-			} );
-			const state = peers( initialState, {
-				type: 'COEDITING_FREEZE_BLOCK',
-				uid,
-				meta: {
-					peerId,
-				},
-			} );
-
-			expect( state ).toBe( initialState );
-		} );
-
-		it( 'should not update the state when no frozen blocks for peer', () => {
-			const initialState = deepFreeze( {} );
-			const state = peers( initialState, {
-				type: 'COEDITING_CLEAR_FROZEN_BLOCK',
-				meta: {
-					peerId,
-				},
-			} );
-
-			expect( state ).toBe( initialState );
-		} );
-
-		it( 'should remove the block frozen by peer', () => {
-			const initialState = deepFreeze( {
-				[ peerId ]: uid,
-			} );
-			const state = peers( initialState, {
-				type: 'COEDITING_CLEAR_FROZEN_BLOCK',
-				meta: {
-					peerId,
-				},
-			} );
-
-			expect( state ).toEqual( {} );
-		} );
-	} );
-
 	describe( 'toggleCoediting action', () => {
 		it( 'should return the COEDITING_TOGGLE action', () => {
 			expect( toggleCoediting() ).toEqual( {
@@ -149,41 +204,41 @@ describe( 'coediting state', () => {
 		} );
 	} );
 
-	describe( 'clearFrozenBlock action', () => {
-		it( 'should return the COEDITING_CLEAR_FROZEN_BLOCK action', () => {
-			expect( clearFrozenBlock() ).toEqual( {
-				type: 'COEDITING_CLEAR_FROZEN_BLOCK',
+	describe( 'clearFrozenBlocks action', () => {
+		it( 'should return the COEDITING_BLOCKS_UNFREEZE action', () => {
+			expect( clearFrozenBlocks() ).toEqual( {
+				type: 'COEDITING_BLOCKS_UNFREEZE',
 			} );
 		} );
 	} );
 
-	describe( 'isBlockFrozenByPeer', () => {
+	describe( 'isBlockFrozenByCollaborator', () => {
 		const getInitialState = localState => deepFreeze( {
 			coediting: {
-				peers: localState,
+				blocks: localState,
 			},
 		} );
 
-		it( 'should return false when no peers data', () => {
+		it( 'should return false when no collaborators data', () => {
 			const state = getInitialState( null );
 
-			expect( isBlockFrozenByPeer( state, uid ) ).toBe( false );
+			expect( isBlockFrozenByCollaborator( state, uid ) ).toBe( false );
 		} );
 
-		it( 'should return false when block is not frozen by peer', () => {
+		it( 'should return false when block is not frozen by collaborator', () => {
 			const state = getInitialState( {
-				[ peerId ]: uid,
+				[ uid ]: collaboratorId,
 			} );
 
-			expect( isBlockFrozenByPeer( state, uid ) ).toBe( true );
+			expect( isBlockFrozenByCollaborator( state, uid ) ).toBe( true );
 		} );
 
-		it( 'should return true when block is frozen by peer', () => {
+		it( 'should return true when block is frozen by collaborator', () => {
 			const state = getInitialState( {
-				[ peerId ]: 'unknown',
+				unknown: collaboratorId,
 			} );
 
-			expect( isBlockFrozenByPeer( state, uid ) ).toBe( false );
+			expect( isBlockFrozenByCollaborator( state, uid ) ).toBe( false );
 		} );
 	} );
 

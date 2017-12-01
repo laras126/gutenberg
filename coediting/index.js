@@ -13,6 +13,7 @@ import { camelCaseKeysDeep } from '@wordpress/utils';
 /**
  * Internal dependencies
  */
+import './hooks';
 import Signal from './signal';
 
 export default class Coediting extends EventEmitter {
@@ -35,16 +36,6 @@ export default class Coediting extends EventEmitter {
 		this.isConnected = false;
 		this.keys = [];
 		this.init();
-	}
-
-	/**
-	 * Returns random color from a list of arrays.
-	 *
-	 * @return {string} color from array.
-	 */
-	static getColor() {
-		const colors = [ 'red', 'purple', 'orange', 'yellow', 'green' ];
-		return colors[ Math.floor( Math.random() * colors.length ) ];
 	}
 
 	/**
@@ -143,9 +134,9 @@ export default class Coediting extends EventEmitter {
 				this.emit( 'peerData', parsedData );
 			} );
 
-			this.peer.on( 'close', ( peer ) => {
+			this.peer.on( 'close', () => {
 				this.isConnected = false;
-				this.emit( 'peerClosed', peer );
+				this.emit( 'peerClosed', );
 				clearInterval( this.listenSignalTimer );
 				delete this._events.initiator;
 				delete this._events.peerFound;

@@ -2,7 +2,76 @@
  * External dependencies
  */
 import { combineReducers } from 'redux';
-import { find, get, omit } from 'lodash';
+import { get, has, omit, omitBy, some } from 'lodash';
+
+const colors = [ 'red', 'purple', 'orange', 'yellow', 'green' ];
+
+const pickColor = () => {
+	return colors[ Math.floor( Math.random() * colors.length ) ];
+};
+
+/**
+ * Reducer returning frozen blocks state when coediting.
+ *
+ * @param  {Boolean} state  Current state
+ * @param  {Object}  action Dispatched action
+ * @return {Boolean}        Updated state
+ */
+export const blocks = ( state = {}, action ) => {
+	const collaboratorId = get( action, 'meta.collaboratorId', null );
+	const isCurrentCollaborator = value => value === collaboratorId;
+
+	if ( ! collaboratorId ) {
+		return state;
+	}
+
+	switch ( action.type ) {
+		case 'COEDITING_BLOCKS_UNFREEZE':
+			if ( ! some( state, isCurrentCollaborator ) ) {
+				return state;
+			}
+
+			return omitBy( state, isCurrentCollaborator );
+		case 'COEDITING_FREEZE_BLOCK':
+			if ( state[ action.uid ] === collaboratorId ) {
+				return state;
+			}
+
+			return {
+				...omitBy( state, isCurrentCollaborator ),
+				[ action.uid ]: collaboratorId,
+			};
+	}
+	return state;
+};
+
+/**
+ * Reducer returning collaborators state when coediting.
+ *
+ * @param  {Boolean} state  Current state
+ * @param  {Object}  action Dispatched action
+ * @return {Boolean}        Updated state
+ */
+export const collaborators = ( state = {}, action ) => {
+	switch ( action.type ) {
+		case 'COEDITING_COLLABORATOR_ADD':
+			return {
+				...state,
+				[ action.collaboratorId ]: {
+					color: pickColor(),
+					name: `User: ${ action.userId }`,
+					userId: action.userId,
+				},
+			};
+		case 'COEDITING_COLLABORATOR_REMOVE':
+			if ( ! state[ action.collaboratorId ] ) {
+				return state;
+			}
+
+			return omit( state, action.collaboratorId );
+	}
+	return state;
+};
 
 /**
  * Reducer returning coediting enabled state.
@@ -19,58 +88,25 @@ export const enabled = ( state = false, action ) => {
 	return state;
 };
 
-/**
- * Reducer returning coedting state of peers.
- *
- * @param  {Boolean} state  Current state
- * @param  {Object}  action Dispatched action
- * @return {Boolean}        Updated state
- */
-export const peers = ( state = {}, action ) => {
-	const peerId = get( action, 'meta.peerId', null );
-
-	if ( ! peerId ) {
-		return state;
-	}
-
-	switch ( action.type ) {
-		case 'COEDITING_CLEAR_FROZEN_BLOCK':
-			if ( ! state[ peerId ] ) {
-				return state;
-			}
-
-			return omit( state, peerId );
-		case 'COEDITING_FREEZE_BLOCK':
-			if ( state[ peerId ] === action.uid ) {
-				return state;
-			}
-
-			return {
-				...state,
-				[ peerId ]: action.uid,
-			};
-	}
-	return state;
-};
-
 export const reducer = combineReducers( {
+	blocks,
+	collaborators,
 	enabled,
-	peers,
 } );
 
 /**
- * Returns an action object used to clear the block freeze edited by peer.
+ * Returns an action object used to clear the freeze for blocks edited by the collaborator.
  *
  * @return {Object} Action object
  */
-export function clearFrozenBlock() {
+export function clearFrozenBlocks() {
 	return {
-		type: 'COEDITING_CLEAR_FROZEN_BLOCK',
+		type: 'COEDITING_BLOCKS_UNFREEZE',
 	};
 }
 
 /**
- * Returns an action object used to freeze the block edited by peer.
+ * Returns an action object used to freeze the block edited by the collaborator.
  *
  * @param  {String} uid Block unique ID
  * @return {Object}     Action object
@@ -93,6 +129,49 @@ export function toggleCoediting() {
 	};
 }
 
+const getFrozenBlockCollaboratorProp = prop =>
+	( state, uid ) => {
+		const collaboratorId = get( state, [ 'coediting', 'blocks', uid ], null );
+
+		if ( collaboratorId === null ) {
+			return null;
+		}
+
+		return get( state, [ 'coediting', 'collaborators', collaboratorId, prop ], null );
+	};
+
+/**
+ * Returns a color assigned to the collaborator when block is frozen or null otherwise.
+ *
+ * @param {Object} state Global application state
+ * @param {String} uid   Block unique ID
+ *
+ * @return {String|null} Color when block frozen, null otherwise
+ */
+export const getFrozenBlockCollaboratorColor = getFrozenBlockCollaboratorProp( 'color' );
+
+/**
+ * Returns a name assigned to the collaborator when block is frozen or null otherwise.
+ *
+ * @param {Object} state Global application state
+ * @param {String} uid   Block unique ID
+ *
+ * @return {String|null}     Whether coediting is enabled
+ */
+export const getFrozenBlockCollaboratorName = getFrozenBlockCollaboratorProp( 'name' );
+
+/**
+ * Returns true when a block is frozen by the collaborator or false otherwise.
+ *
+ * @param {Object} state Global application state
+ * @param {String} uid   Block unique ID
+ *
+ * @return {Boolean}     Whether block is frozen by collaborator
+ */
+export function isBlockFrozenByCollaborator( state, uid ) {
+	return has( state, [ 'coediting', 'blocks', uid ], false );
+}
+
 /**
  * Returns true when coediting is enabled, or false otherwise.
  *
@@ -102,21 +181,4 @@ export function toggleCoediting() {
  */
 export function isCoeditingEnabled( state ) {
 	return get( state, 'coediting.enabled', false );
-}
-
-/**
- * Returns true when block is frozen be peer, or false otherwise.
- *
- * @param {Object} state Global application state
- * @param {String} uid   Block unique ID
- *
- * @return {Boolean}     Whether block is frozen by peer
- */
-export function isBlockFrozenByPeer( state, uid ) {
-	return Boolean(
-		find(
-			get( state, 'coediting.peers', {} ),
-			( currentUid ) => currentUid === uid,
-		)
-	);
 }
