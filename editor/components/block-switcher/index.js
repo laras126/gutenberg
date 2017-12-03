@@ -24,7 +24,7 @@ import { getBlock } from '../../selectors';
  */
 const { DOWN } = keycodes;
 
-function BlockSwitcher( { blocks, onTransform } ) {
+export function BlockSwitcher( { blocks, onTransform } ) {
 	if ( ! blocks || ! blocks[ 0 ] ) {
 		return null;
 	}

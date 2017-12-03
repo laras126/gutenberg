@@ -1,0 +1,57 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`BlockSwitcher Test block switcher with blocks 1`] = `
+<div
+  className="editor-block-switcher"
+>
+  <div
+    className="components-toolbar"
+  >
+    <button
+      aria-expanded={false}
+      aria-haspopup="true"
+      aria-label="Change block type"
+      className="components-button components-icon-button editor-block-switcher__toggle"
+      disabled={undefined}
+      onClick={[Function]}
+      onKeyDown={[Function]}
+      type="button"
+    >
+      <svg
+        aria-hidden={true}
+        className="dashicon dashicons-heading"
+        focusable="false"
+        height={20}
+        role="img"
+        viewBox="0 0 20 20"
+        width={20}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M12.5 4v5.2h-5V4H5v13h2.5v-5.2h5V17H15V4"
+        />
+      </svg>
+      <svg
+        aria-hidden={true}
+        className="dashicon dashicons-arrow-down"
+        focusable="false"
+        height={20}
+        role="img"
+        viewBox="0 0 20 20"
+        width={20}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M15 8l-4.03 6L7 8h8z"
+        />
+      </svg>
+    </button>
+  </div>
+</div>
+`;
+
+exports[`BlockSwitcher Test block switcher with multi block of different types. 1`] = `null`;
+
+exports[`BlockSwitcher Test block switcher with multi block of same types. 1`] = `null`;
+
+exports[`BlockSwitcher Test block switcher without blocks 1`] = `null`;
