@@ -1,258 +1,298 @@
 <?php
 /**
- * Functions related to editor blocks for the Gutenberg editor plugin.
+ * Block and style registration functions.
  *
  * @package gutenberg
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
-	die( 'Silence is golden.' );
-}
-
 /**
- * Registers a block type.
- *
- * @since 0.1.0
- * @since 0.6.0 Now also accepts a WP_Block_Type instance as first parameter.
- *
- * @param string|WP_Block_Type $name Block type name including namespace, or alternatively a
- *                                   complete WP_Block_Type instance. In case a WP_Block_Type
- *                                   is provided, the $args parameter will be ignored.
- * @param array                $args {
- *     Optional. Array of block type arguments. Any arguments may be defined, however the
- *     ones described below are supported by default. Default empty array.
- *
- *     @type callable $render_callback Callback used to render blocks of this block type.
- * }
- * @return WP_Block_Type|false The registered block type on success, or false on failure.
+ * Substitutes the implementation of a core-registered block type, if exists,
+ * with the built result from the plugin.
  */
-function register_block_type( $name, $args = array() ) {
-	return WP_Block_Type_Registry::get_instance()->register( $name, $args );
-}
+function gutenberg_reregister_core_block_types() {
+	// Blocks directory may not exist if working from a fresh clone.
+	$blocks_dir = dirname( __FILE__ ) . '/../build/block-library/blocks/';
+	if ( ! file_exists( $blocks_dir ) ) {
+		return;
+	}
 
-/**
- * Unregisters a block type.
- *
- * @since 0.1.0
- * @since 0.6.0 Now also accepts a WP_Block_Type instance as first parameter.
- *
- * @param string|WP_Block_Type $name Block type name including namespace, or alternatively a
- *                                   complete WP_Block_Type instance.
- * @return WP_Block_Type|false The unregistered block type on success, or false on failure.
- */
-function unregister_block_type( $name ) {
-	return WP_Block_Type_Registry::get_instance()->unregister( $name );
-}
+	$block_folders = array(
+		'audio',
+		'button',
+		'buttons',
+		'classic',
+		'code',
+		'column',
+		'columns',
+		'file',
+		'gallery',
+		'group',
+		'heading',
+		'html',
+		'image',
+		'list',
+		'media-text',
+		'missing',
+		'more',
+		'navigation-link',
+		'nextpage',
+		'paragraph',
+		'preformatted',
+		'pullquote',
+		'quote',
+		'separator',
+		'social-links',
+		'spacer',
+		'subhead',
+		'table',
+		'text-columns',
+		'verse',
+		'video',
+		'widget-area',
+	);
 
-/**
- * Parses blocks out of a content string.
- *
- * @since 0.5.0
- *
- * @param  string $content Post content.
- * @return array  Array of parsed block objects.
- */
-function gutenberg_parse_blocks( $content ) {
-	/*
-	 * If there are no blocks in the content, return a single block, rather
-	 * than wasting time trying to parse the string.
-	 */
-	if ( ! gutenberg_content_has_blocks( $content ) ) {
-		return array(
+	$block_names = array(
+		'archives.php'        => 'core/archives',
+		'block.php'           => 'core/block',
+		'calendar.php'        => 'core/calendar',
+		'categories.php'      => 'core/categories',
+		'cover.php'           => 'core/cover',
+		'latest-comments.php' => 'core/latest-comments',
+		'latest-posts.php'    => 'core/latest-posts',
+		'legacy-widget.php'   => 'core/legacy-widget',
+		'navigation.php'      => 'core/navigation',
+		'rss.php'             => 'core/rss',
+		'search.php'          => 'core/search',
+		'shortcode.php'       => 'core/shortcode',
+		'social-link.php'     => 'core/social-link',
+		'tag-cloud.php'       => 'core/tag-cloud',
+	);
+
+	if ( gutenberg_is_experiment_enabled( 'gutenberg-full-site-editing' ) ) {
+		$block_names = array_merge(
+			$block_names,
 			array(
-				'attrs'     => array(),
-				'innerHTML' => $content,
-			),
+				'post-author.php'         => 'core/post-author',
+				'post-comments.php'       => 'core/post-comments',
+				'post-comments-count.php' => 'core/post-comments-count',
+				'post-comments-form.php'  => 'core/post-comments-form',
+				'post-content.php'        => 'core/post-content',
+				'post-date.php'           => 'core/post-date',
+				'post-excerpt.php'        => 'core/post-excerpt',
+				'post-featured-image.php' => 'core/post-featured-image',
+				'post-tags.php'           => 'core/post-tags',
+				'post-title.php'          => 'core/post-title',
+				'query.php'               => 'core/query',
+				'query-loop.php'          => 'core/query-loop',
+				'query-pagination.php'    => 'core/query-pagination',
+				'site-title.php'          => 'core/site-title',
+				'template-part.php'       => 'core/template-part',
+			)
 		);
 	}
 
-	$parser = new Gutenberg_PEG_Parser;
-	return $parser->parse( _gutenberg_utf8_split( $content ) );
-}
+	$registry = WP_Block_Type_Registry::get_instance();
 
-/**
- * Given an array of parsed blocks, returns content string.
- *
- * @since 1.7.0
- *
- * @param array $blocks Parsed blocks.
- *
- * @return string Content string.
- */
-function gutenberg_serialize_blocks( $blocks ) {
-	return implode( '', array_map( 'gutenberg_serialize_block', $blocks ) );
-}
-
-/**
- * Given a parsed block, returns content string.
- *
- * @since 1.7.0
- *
- * @param array $block Parsed block.
- *
- * @return string Content string.
- */
-function gutenberg_serialize_block( $block ) {
-	// Return content of unknown block verbatim.
-	if ( ! isset( $block['blockName'] ) ) {
-		return $block['innerHTML'];
-	}
-
-	// Custom formatting for specific block types.
-	if ( 'core/more' === $block['blockName'] ) {
-		$content = '<!--more';
-		if ( ! empty( $block['attrs']['customText'] ) ) {
-			$content .= ' ' . $block['attrs']['customText'];
+	foreach ( $block_folders as $folder_name ) {
+		$block_json_file = $blocks_dir . '/' . $folder_name . '/block.json';
+		if ( ! file_exists( $block_json_file ) ) {
+			return;
 		}
 
-		$content .= '-->';
-		if ( ! empty( $block['attrs']['noTeaser'] ) ) {
-			$content .= "\n" . '<!--noteaser-->';
+		// Ideally, all paths to block metadata files should be listed in
+		// WordPress core. In this place we should rather use filter
+		// to replace paths with overrides defined by the plugin.
+		$metadata = json_decode( file_get_contents( $block_json_file ), true );
+		if ( ! is_array( $metadata ) || ! $metadata['name'] ) {
+			return false;
 		}
 
-		return $content;
-	}
-
-	// For standard blocks, return with comment-delimited wrapper.
-	$content = '<!-- wp:' . $block['blockName'] . ' ';
-
-	if ( ! empty( $block['attrs'] ) ) {
-		$attrs_json = json_encode( $block['attrs'] );
-
-		// In PHP 5.4+, we would pass the `JSON_UNESCAPED_SLASHES` option to
-		// `json_encode`. To support older versions, we must apply manually.
-		$attrs_json = str_replace( '\\/', '/', $attrs_json );
-
-		// Don't break HTML comments.
-		$attrs_json = str_replace( '--', '\\u002d\\u002d', $attrs_json );
-
-		// Don't break standard-non-compliant tools.
-		$attrs_json = str_replace( '<', '\\u003c', $attrs_json );
-		$attrs_json = str_replace( '>', '\\u003e', $attrs_json );
-		$attrs_json = str_replace( '&', '\\u0026', $attrs_json );
-
-		$content .= $attrs_json . ' ';
-	}
-
-	if ( empty( $block['innerHTML'] ) ) {
-		return $content . '/-->';
-	}
-
-	$content .= '-->';
-	$content .= $block['innerHTML'];
-	$content .= '<!-- /wp:' . $block['blockName'] . ' -->';
-	return $content;
-}
-
-/**
- * Renders a single block into a HTML string.
- *
- * @since 1.9.0
- *
- * @param  array $block A single parsed block object.
- * @return string String of rendered HTML.
- */
-function gutenberg_render_block( $block ) {
-	$block_name  = isset( $block['blockName'] ) ? $block['blockName'] : null;
-	$attributes  = is_array( $block['attrs'] ) ? $block['attrs'] : array();
-	$raw_content = isset( $block['innerHTML'] ) ? $block['innerHTML'] : null;
-
-	if ( $block_name ) {
-		$block_type = WP_Block_Type_Registry::get_instance()->get_registered( $block_name );
-		if ( null !== $block_type ) {
-			return $block_type->render( $attributes, $raw_content );
-		}
-	}
-
-	if ( $raw_content ) {
-		return $raw_content;
-	}
-
-	return '';
-}
-
-/**
- * Parses dynamic blocks out of `post_content` and re-renders them.
- *
- * @since 0.1.0
- *
- * @param  string $content Post content.
- * @return string          Updated post content.
- */
-function do_blocks( $content ) {
-	$blocks = gutenberg_parse_blocks( $content );
-
-	$content_after_blocks = '';
-	foreach ( $blocks as $block ) {
-		$content_after_blocks .= gutenberg_render_block( $block );
-	}
-	return $content_after_blocks;
-}
-add_filter( 'the_content', 'do_blocks', 9 ); // BEFORE do_shortcode().
-
-/**
- * Given a string, returns content normalized with automatic paragraphs applied
- * to text not identified as a block. Since this executes the block parser, it
- * should not be used in a performance-critical flow such as content display.
- * Block content will not have automatic paragraphs applied.
- *
- * @since 1.7.0
- *
- * @param  string $content Original content.
- * @return string          Content formatted with automatic paragraphs applied
- *                         to unknown blocks.
- */
-function gutenberg_wpautop_block_content( $content ) {
-	$blocks = gutenberg_parse_blocks( $content );
-	foreach ( $blocks as $i => $block ) {
-		if ( isset( $block['blockName'] ) ) {
-			continue;
+		if ( $registry->is_registered( $metadata['name'] ) ) {
+			$registry->unregister( $metadata['name'] );
 		}
 
-		$content = $block['innerHTML'];
+		register_block_type_from_metadata( $block_json_file );
+	}
 
-		// wpautop will trim leading whitespace and return whitespace-only text
-		// as an empty string. Preserve to apply leading whitespace as prefix.
-		preg_match( '/^(\s+)/', $content, $prefix_match );
-		$prefix = empty( $prefix_match ) ? '' : $prefix_match[0];
-
-		$content = $prefix . wpautop( $content, false );
-
-		// To normalize as text where wpautop would not be applied, restore
-		// double newline to wpautop'd text if not at the end of content.
-		$is_last_block = ( count( $blocks ) === $i + 1 );
-		if ( ! $is_last_block ) {
-			$content = str_replace( "</p>\n", "</p>\n\n", $content );
+	foreach ( $block_names as $file => $block_names ) {
+		if ( ! file_exists( $blocks_dir . $file ) ) {
+			return;
 		}
 
-		$blocks[ $i ]['innerHTML'] = $content;
-	}
+		if ( is_string( $block_names ) ) {
+			if ( $registry->is_registered( $block_names ) ) {
+				$registry->unregister( $block_names );
+			}
+		} elseif ( is_array( $block_names ) ) {
+			foreach ( $block_names as $block_name ) {
+				if ( $registry->is_registered( $block_name ) ) {
+					$registry->unregister( $block_name );
+				}
+			}
+		}
 
-	return gutenberg_serialize_blocks( $blocks );
+		require $blocks_dir . $file;
+	}
 }
+add_action( 'init', 'gutenberg_reregister_core_block_types' );
 
 /**
- * Filters saved post data to apply wpautop to freeform block content.
+ * Complements the implementation of block type `core/social-icon`, whether it
+ * be provided by core or the plugin, with derived block types for each
+ * "service" (WordPress, Twitter, etc.) supported by Social Links.
  *
- * @since 1.7.0
+ * This ensures backwards compatibility for any users running the Gutenberg
+ * plugin who have used Social Links prior to their conversion to block
+ * variations.
  *
- * @param  array $data An array of slashed post data.
- * @return array       An array of post data with wpautop applied to freeform
- *                     block content.
+ * This shim is INTENTIONALLY left out of core, as Social Links haven't yet
+ * landed there.
+ *
+ * @see https://github.com/WordPress/gutenberg/pull/19887
  */
-function gutenberg_wpautop_insert_post_data( $data ) {
-	if ( ! empty( $data['post_content'] ) && gutenberg_content_has_blocks( $data['post_content'] ) ) {
-		// WP_REST_Posts_Controller slashes post data before inserting/updating
-		// a post. This data gets unslashed by `wp_insert_post` right before
-		// saving to the DB. The PEG parser needs unslashed input in order to
-		// properly parse JSON attributes.
-		$content = wp_unslash( $data['post_content'] );
-		$content = gutenberg_wpautop_block_content( $content );
-		$content = wp_slash( $content );
+function gutenberg_register_legacy_social_link_blocks() {
+	$services = array(
+		'amazon',
+		'bandcamp',
+		'behance',
+		'chain',
+		'codepen',
+		'deviantart',
+		'dribbble',
+		'dropbox',
+		'etsy',
+		'facebook',
+		'feed',
+		'fivehundredpx',
+		'flickr',
+		'foursquare',
+		'goodreads',
+		'google',
+		'github',
+		'instagram',
+		'lastfm',
+		'linkedin',
+		'mail',
+		'mastodon',
+		'meetup',
+		'medium',
+		'pinterest',
+		'pocket',
+		'reddit',
+		'skype',
+		'snapchat',
+		'soundcloud',
+		'spotify',
+		'tumblr',
+		'twitch',
+		'twitter',
+		'vimeo',
+		'vk',
+		'wordpress',
+		'yelp',
+		'youtube',
+	);
 
-		$data['post_content'] = $content;
+	foreach ( $services as $service ) {
+		register_block_type(
+			'core/social-link-' . $service,
+			array(
+				'category'        => 'widgets',
+				'attributes'      => array(
+					'url'     => array(
+						'type' => 'string',
+					),
+					'service' => array(
+						'type'    => 'string',
+						'default' => $service,
+					),
+					'label'   => array(
+						'type' => 'string',
+					),
+				),
+				'render_callback' => 'gutenberg_render_block_core_social_link',
+			)
+		);
 	}
-
-	return $data;
 }
-add_filter( 'wp_insert_post_data', 'gutenberg_wpautop_insert_post_data' );
+add_action( 'init', 'gutenberg_register_legacy_social_link_blocks' );
+
+if ( ! function_exists( 'register_block_style' ) ) {
+	/**
+	 * Registers a new block style.
+	 *
+	 * @param string $block_name       Block type name including namespace.
+	 * @param array  $style_properties Array containing the properties of the style name, label, style (name of the stylesheet to be enqueued), inline_style (string containing the CSS to be added).
+	 *
+	 * @return boolean True if the block style was registered with success and false otherwise.
+	 */
+	function register_block_style( $block_name, $style_properties ) {
+		return WP_Block_Styles_Registry::get_instance()->register( $block_name, $style_properties );
+	}
+}
+
+if ( ! function_exists( 'unregister_block_style' ) ) {
+	/**
+	 * Unregisters a block style.
+	 *
+	 * @param string $block_name       Block type name including namespace.
+	 * @param array  $block_style_name Block style name.
+	 *
+	 * @return boolean True if the block style was unregistered with success and false otherwise.
+	 */
+	function unregister_block_style( $block_name, $block_style_name ) {
+		return WP_Block_Styles_Registry::get_instance()->unregister( $block_name, $block_style_name );
+	}
+}
+
+if ( ! has_action( 'enqueue_block_assets', 'enqueue_block_styles_assets' ) ) {
+	/**
+	 * Function responsible for enqueuing the styles required for block styles functionality on the editor and on the frontend.
+	 */
+	function gutenberg_enqueue_block_styles_assets() {
+		$block_styles = WP_Block_Styles_Registry::get_instance()->get_all_registered();
+
+		foreach ( $block_styles as $styles ) {
+			foreach ( $styles as $style_properties ) {
+				if ( isset( $style_properties['style_handle'] ) ) {
+					wp_enqueue_style( $style_properties['style_handle'] );
+				}
+				if ( isset( $style_properties['inline_style'] ) ) {
+					wp_add_inline_style( 'wp-block-library', $style_properties['inline_style'] );
+				}
+			}
+		}
+	}
+	add_action( 'enqueue_block_assets', 'gutenberg_enqueue_block_styles_assets', 30 );
+}
+if ( ! has_action( 'enqueue_block_editor_assets', 'enqueue_editor_block_styles_assets' ) ) {
+	/**
+	 * Function responsible for enqueuing the assets required for block styles functionality on the editor.
+	 */
+	function gutenberg_enqueue_editor_block_styles_assets() {
+		$block_styles = WP_Block_Styles_Registry::get_instance()->get_all_registered();
+
+		$register_script_lines = array( '( function() {' );
+		foreach ( $block_styles as $block_name => $styles ) {
+			foreach ( $styles as $style_properties ) {
+				$register_script_lines[] = sprintf(
+					'	wp.blocks.registerBlockStyle( \'%s\', %s );',
+					$block_name,
+					wp_json_encode(
+						array(
+							'name'  => $style_properties['name'],
+							'label' => $style_properties['label'],
+						)
+					)
+				);
+			}
+		}
+		$register_script_lines[] = '} )();';
+		$inline_script           = implode( "\n", $register_script_lines );
+
+		wp_register_script( 'wp-block-styles', false, array( 'wp-blocks' ), true, true );
+		wp_add_inline_script( 'wp-block-styles', $inline_script );
+		wp_enqueue_script( 'wp-block-styles' );
+	}
+	add_action( 'enqueue_block_editor_assets', 'gutenberg_enqueue_editor_block_styles_assets' );
+}
